@@ -47,7 +47,7 @@ function ago(iso) {
   return m < 18 ? `${m} month${m === 1 ? "" : "s"} ago` : `${Math.round(days / 365)} years ago`;
 }
 const daysSince = (iso) => (Date.now() - new Date(iso + "T12:00:00")) / 864e5;
-const isStale = (iso) => iso && daysSince(iso) > 180;  // prices older than ~6 months show in amber
+const isStale = (iso) => iso && daysSince(iso) > 180;  // prices older than ~6 months get a clock mark: worth rechecking
 const stars = (r) => r == null ? "" : `<span class="stars" title="${r} of 5">${"★".repeat(Math.floor(r))}${r % 1 ? "½" : ""}</span>`;
 
 // line icons (24px grid), same style as Roasted
@@ -229,11 +229,13 @@ function loadLeaflet() {
   });
 }
 const tiles = (map) => L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors" }).addTo(map);
+// Graphite Red: markers differ in lightness, not hue. Filled action colour = something under the cap,
+// filled graphite = the cheapest dish costs more, hollow = no prices yet.
+const tok = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 function markerStyle(p) {
-  const css = getComputedStyle(document.documentElement);
-  const deal = css.getPropertyValue("--deal").trim(), acc = css.getPropertyValue("--accent").trim();
-  if (p.cheapest == null) return { radius: 8, color: acc, weight: 3, fillColor: "#fff", fillOpacity: 1 };
-  return { radius: 9, color: "#fff", weight: 2, fillColor: isDeal(p.cheapest) ? deal : acc, fillOpacity: 0.95 };
+  const ground = tok("--surface"), edge = tok("--border-strong");
+  if (p.cheapest == null) return { radius: 8, color: edge, weight: 3, fillColor: ground, fillOpacity: 1 };
+  return { radius: 9, color: ground, weight: 2, fillColor: isDeal(p.cheapest) ? tok("--action") : tok("--price-over"), fillOpacity: 1 };
 }
 async function mapView() {
   const f = await facets();
@@ -243,7 +245,7 @@ async function mapView() {
         <button type="button" class="chip" id="m-all">Show all</button><button type="button" class="chip" id="m-near">${icon("locate")} Near me</button></div>
       <div class="chips" id="m-max">${[["", "Any price"], [String(cap()), `Under $${cap()}`]].map(([v, t]) => `<button type="button" class="chip ${String(S.max) === v ? "on" : ""}" data-v="${v}">${t}</button>`).join("")}</div>
     </div>
-    <div class="legend"><span><i class="dot" style="background:var(--deal)"></i>Something under $${cap()}</span><span><i class="dot" style="background:var(--accent)"></i>Cheapest is more</span><span><i class="dot" style="background:#fff;border-color:var(--accent)"></i>No prices yet</span><span id="mcount"></span></div>
+    <div class="legend"><span><i class="dot deal"></i>Something under $${cap()}</span><span><i class="dot over"></i>Cheapest is more</span><span><i class="dot none"></i>No prices yet</span><span id="mcount"></span></div>
     <div id="map"></div>`;
   const [d] = await Promise.all([api("map"), loadLeaflet()]);
   const map = L.map("map", { scrollWheelZoom: true });
@@ -274,7 +276,7 @@ async function mapView() {
   $("#m-near").onclick = () => locateMe((pos) => {
     S.near = pos;
     if (me) me.remove();
-    me = L.circleMarker([pos.lat, pos.lng], { radius: 7, color: "#fff", weight: 3, fillColor: "#2563eb", fillOpacity: 1 }).addTo(map).bindPopup("You are here");
+    me = L.circleMarker([pos.lat, pos.lng], { radius: 7, color: tok("--surface"), weight: 3, fillColor: tok("--red-progressive"), fillOpacity: 1 }).addTo(map).bindPopup("You are here");
     map.setView([pos.lat, pos.lng], 16);
   });
   $$("#m-max [data-v]").forEach((b) => b.onclick = () => {
@@ -347,7 +349,7 @@ async function placeView(id) {
       ${p.lat != null ? `<div id="mini" class="mini-map"></div>` : ADMIN && p.address ? `<div class="note">Couldn't find this address on the map. Check it in <a href="#/place/${p.id}/edit">Edit place</a>, or set the pin there.</div>` : ""}
     </div>
 
-    <div class="section-h"><h2>What to get</h2><span class="muted small">cheapest first · <span class="price deal">green</span> = under $${cap()}</span></div>
+    <div class="section-h"><h2>What to get</h2><span class="muted small">cheapest first · <span class="price deal">$</span> = under $${cap()}</span></div>
     ${p.items.length ? `<table class="items-table"><tbody>${p.items.map((i) => itemRow(i, p)).join("")}</tbody></table>` : `<div class="empty" style="padding:16px">No dishes yet.</div>`}
     ${ADMIN ? `<div style="margin-top:12px" id="add-item">${itemFormHTML()}</div>
       ${cfg.menu_reading ? `<div class="panel" style="margin-top:12px"><div class="spread"><div><strong>${icon("sparkle")} Read a menu photo</strong>
@@ -465,7 +467,7 @@ async function readMenu(p, files) {
   if (!d.items.length) { out.innerHTML = `<p class="note">No dishes with prices found on that photo.</p>`; return; }
   const have = new Set(p.items.map((i) => fold(i.name)));
   out.innerHTML = `<p class="small muted" style="margin:12px 0 6px">Found ${d.items.length}. Cheap ones are ticked; fix anything before adding.
-      ${d.uncertain.length ? `<br><span class="stale">Unsure about: ${d.uncertain.map(esc).join(", ")}</span>` : ""}</p>
+      ${d.uncertain.length ? `<br><strong>Unsure about:</strong> <span>${d.uncertain.map(esc).join(", ")}</span>` : ""}</p>
     <div class="menu-rows">${d.items.map((it, n) => `<label>
       <input type="checkbox" data-n="${n}" ${isDeal(it.price) && !have.has(fold(it.name)) ? "checked" : ""}>
       <span><input type="text" data-name="${n}" value="${esc(it.name)}" aria-label="Name">
@@ -535,7 +537,7 @@ async function editView(id) {
     pinMap.setView([lat, lng], zoom);
     if (pin) pin.setLatLng([lat, lng]);
     else {
-      pin = L.marker([lat, lng], { draggable: true, icon: L.divIcon({ className: "", html: `<span class="dot" style="background:var(--accent);width:18px;height:18px"></span>`, iconSize: [18, 18] }) }).addTo(pinMap);
+      pin = L.marker([lat, lng], { draggable: true, icon: L.divIcon({ className: "", html: `<span class="dot deal" style="width:20px;height:20px"></span>`, iconSize: [18, 18] }) }).addTo(pinMap);
       pin.on("dragend", () => { const ll = pin.getLatLng(); F("lat").value = ll.lat.toFixed(6); F("lng").value = ll.lng.toFixed(6); });
     }
     setTimeout(() => pinMap.invalidateSize(), 50);

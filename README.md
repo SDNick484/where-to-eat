@@ -1,6 +1,6 @@
 # Where to Eat
 
-A list of affordable lunch spots, mostly in Concord and San Francisco. It tracks the cheap things worth ordering at each one and what they cost, with photos from your phone and a map. Flask + SQLite, one small service on CT 210 next to Cookbooks, Dinner Log, the wish list and Roasted.
+A list of affordable lunch spots, mostly in Concord and San Francisco. It tracks the cheap things worth ordering at each one and what they cost, with photos from your phone and a map. Flask + SQLite, one small service on CT 210 next to Cookbooks, Dinner Log, the wish list and Roasted, styled with my Graphite Red design system.
 
 - **Public:** `https://lunch.nickandrade.com/` shows the places, a *Deals* list of every dish cheapest first, and the map. Private notes and who added what are left out.
 - **Editing:** `https://lunch.nickandrade.com/admin` sits behind Cloudflare Access. A few people can sign in there to add places, dishes and photos.
@@ -14,19 +14,19 @@ A list of affordable lunch spots, mostly in Concord and San Francisco. It tracks
 
 - A dish's **type** is *Dish*, *Meal deal* (a combo with sides or a drink) or *Special* (daily or time-limited).
 - **★ Go-to dish** marks what to actually order there. Go-to dishes are listed first on the place's card.
-- Anything at or under **CHEAP_UNDER** ($15 by default) shows in green and counts as a deal.
+- Anything at or under **CHEAP_UNDER** ($15 by default) counts as a deal, and its price is set in a solid pill.
 
 ### Prices go stale
 Each price records when it was last checked.
 - Entering or changing a price sets that date to today.
 - When a price is older than a month, the place page offers **still $X**. One tap confirms the price is unchanged.
-- Prices older than six months show in amber everywhere, so you know to double-check them.
+- Prices older than six months get a clock mark everywhere, so you know to double-check them.
 
 ## Finding lunch
 - **Places:** pick an area (Concord, San Francisco, or everywhere) and a price cap (*Under $10 / $15 / $20*). You can also search places and dishes by name, so "pho", "burrito" and "Mission" all work. Sort by cheapest, nearest, top rated, newest or name.
 - **Near me:** sorts by distance from your phone's location. On *Deals* it lists dishes within 5 km.
 - **Deals:** every dish with a price, cheapest first. Filter it to *Meal deals* or *Specials*.
-- **Map:** places are colored by their cheapest dish. **Green** means something under the cap, **orange** means the cheapest dish costs more, and **hollow** means no prices yet. Use the area buttons to jump between Concord and SF.
+- **Map:** markers show each place's cheapest dish. **Solid black** (white in dark mode) means something under the cap, **graphite** means the cheapest dish costs more, and **hollow** means no prices yet. The red dot is you, after **Near me**. Use the area buttons to jump between Concord and SF.
 - **Directions** on a place opens Google Maps.
 
 ## Adding a place (on your phone, at the restaurant)
@@ -89,7 +89,7 @@ To keep the whole thing private, set `PUBLIC_VIEW=0`. `/` then redirects to `/ad
 | Setting | Default | What it does |
 |---|---|---|
 | `AREAS` | `Concord\|37.9780\|-122.0311;San Francisco\|37.7749\|-122.4194` | Area chips, map buttons, and the area a new place gets from its pin |
-| `CHEAP_UNDER` | `15` | Dollar cap for "cheap" (green) |
+| `CHEAP_UNDER` | `15` | Dollar cap for "cheap" (deal prices) |
 | `PUBLIC_VIEW` | `1` | `0` puts everything behind `/admin` |
 | `LAN_EDIT` | `1` | Direct LAN requests may edit |
 | `ADMIN_EMAILS` | | Who may edit; empty = anyone the Access policy lets in |
@@ -120,7 +120,17 @@ python3 app.py                      # http://localhost:8769/admin, data in ./dat
 python3 -m pytest -q tests
 ```
 
+## Look and feel
+Styled with my **Graphite Red** design system:
+- Monochrome: black, white and graphite greys. The dark theme uses the blue-black canvas.
+- Square corners on buttons, cards, inputs and photos; pills only for filter chips, badges and deal prices.
+- Archivo throughout, with regular-weight headlines; 1.5px line icons; hairline dividers instead of shadows.
+- Progressive Red is the one accent, used sparingly: the live "you are here" dot and errors. Cheap prices and map markers are told apart by lightness rather than color, so they read in both themes.
+- The street map is shown in greyscale (inverted in dark mode) so the markers stand out.
+
+The token names in `static/style.css` match the system's `tokens.json`. In dark mode, secondary text stays in `ink` because the system's dark `ink-soft` is too faint for body copy.
+
 ## Credits
 - [Leaflet](https://leafletjs.com) 1.9.4 (BSD-2-Clause), bundled in `static/leaflet`, with © OpenStreetMap tiles.
 - Place lookups use OpenStreetMap Nominatim, Photon and the Overpass API.
-- [Figtree](https://github.com/erikdkennedy/figtree) (SIL Open Font License 1.1), bundled in `static/fonts`.
+- [Archivo](https://github.com/Omnibus-Type/Archivo) (SIL Open Font License 1.1), bundled in `static/fonts` from `@fontsource-variable/archivo` 5.2.8.
