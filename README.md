@@ -14,7 +14,7 @@ A list of affordable lunch spots, mostly in Concord and San Francisco. It tracks
 
 - A dish's **type** is *Dish*, *Meal deal* (a combo with sides or a drink) or *Special* (daily or time-limited).
 - **★ Go-to dish** marks what to actually order there. Go-to dishes are listed first on the place's card.
-- Anything at or under **CHEAP_UNDER** ($15 by default) counts as a deal, and its price is set in a solid pill.
+- Anything at or under **CHEAP_UNDER** ($15 by default) counts as a deal: its price is set in a red pill, and the place's card gets a red rule.
 
 ### Prices go stale
 Each price records when it was last checked.
@@ -26,7 +26,7 @@ Each price records when it was last checked.
 - **Places:** pick an area (Concord, San Francisco, or everywhere) and a price cap (*Under $10 / $15 / $20*). You can also search places and dishes by name, so "pho", "burrito" and "Mission" all work. Sort by cheapest, nearest, top rated, newest or name.
 - **Near me:** sorts by distance from your phone's location. On *Deals* it lists dishes within 5 km.
 - **Deals:** every dish with a price, cheapest first. Filter it to *Meal deals* or *Specials*.
-- **Map:** markers show each place's cheapest dish. **Solid black** (white in dark mode) means something under the cap, **graphite** means the cheapest dish costs more, and **hollow** means no prices yet. The red dot is you, after **Near me**. Use the area buttons to jump between Concord and SF.
+- **Map:** markers show each place's cheapest dish. **Red** means something under the cap, **black** means the cheapest dish costs more, and **hollow** means no prices yet. After **Near me**, you're the black dot with a ring. Use the area buttons to jump between Concord and SF.
 - **Directions** on a place opens Google Maps.
 
 ## Adding a place (on your phone, at the restaurant)
@@ -37,7 +37,15 @@ Each price records when it was last checked.
 2. **Take photo** for each shot, or **Choose photos** to pick several from the gallery. These are separate buttons because Android hides the camera when a picker allows several files.
 3. Optionally type a couple of cheap dishes and their prices. Then **Save place**.
 
-From home, type the address and tap **Find** to check where the pin lands. Drag the pin if it's off. If you save without a pin, the address is looked up then: OpenStreetMap Nominatim first, then Photon, which tolerates typos. When a lookup service is down, the editor map retries a few unplaced addresses each time it opens. The area is filled in from the pin, using the nearest of `AREAS` within 30 km.
+### From home: look it up on OpenStreetMap
+Type the restaurant's name under **Or look it up on OpenStreetMap** and tap **Search**. It searches food places within about 13 km of the area you picked, or around all your areas if none is picked.
+- Each match shows which of phone, hours and website OpenStreetMap has, and whether the place is already in your list.
+- Tapping a match fills in only the fields that are still empty, plus the map pin. Anything you've typed stays.
+- **Edit place** has the same search, to fill in details a place is missing later.
+
+San Francisco is well covered. Concord has gaps, especially phone numbers and hours, so type in what's missing. The data is © OpenStreetMap contributors (ODbL). Credit is shown with the results and on every map.
+
+You can also type the address and tap **Find** to check where the pin lands. Drag the pin if it's off. If you save without a pin, the address is looked up then: OpenStreetMap Nominatim first, then Photon, which tolerates typos. When a lookup service is down, the editor map retries a few unplaced addresses each time it opens. The area is filled in from the pin, using the nearest of `AREAS` within 30 km.
 
 Location and the camera need HTTPS, so use `lunch.nickandrade.com` on the phone rather than the LAN IP.
 
@@ -122,11 +130,11 @@ python3 -m pytest -q tests
 
 ## Look and feel
 Styled with my **Graphite Red** design system:
-- Monochrome: black, white and graphite greys. The dark theme uses the blue-black canvas.
-- Square corners on buttons, cards, inputs and photos; pills only for filter chips, badges and deal prices.
-- Archivo throughout, with regular-weight headlines; 1.5px line icons; hairline dividers instead of shadows.
-- Progressive Red is the one accent, used sparingly: the live "you are here" dot and errors. Cheap prices and map markers are told apart by lightness rather than color, so they read in both themes.
-- The street map is shown in greyscale (inverted in dark mode) so the markers stand out.
+- Black, white and graphite greys on square corners, with Archivo type, regular-weight headlines, 1.5px line icons and hairline dividers instead of shadows. The dark theme uses the blue-black canvas.
+- Progressive Red is the accent. It marks active states (the selected tab, the mark by the name, the rule above each section) and deals (prices under the cap, and a red rule on cards that have them). Small text on red is black (5.0:1); white is used on red only at 20px bold.
+- British racing green marks your go-to dishes, in light mode only. On the dark canvas it would be too faint (1.5:1), so it switches to white there.
+- Photos do the emotional work. Each card leads with the place's main photo, and the place page opens with it full width. A place without photos gets a tile in the style of the system's cover: a black slab, white speed rules and one red block.
+- The street map keeps OpenStreetMap's normal colors. The markers use fixed colors because the map is light in both themes.
 
 The token names in `static/style.css` match the system's `tokens.json`. In dark mode, secondary text stays in `ink` because the system's dark `ink-soft` is too faint for body copy.
 

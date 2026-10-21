@@ -1,6 +1,6 @@
 // Minimal service worker (as in Dinner Log): lets Android offer "Install app".
 // Network-first so lists are always current; the last copy is shown when offline. Never caches writes or uploads.
-const CACHE = "where-to-eat-v2";
+const CACHE = "where-to-eat-v3";
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));

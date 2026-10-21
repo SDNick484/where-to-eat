@@ -921,6 +921,54 @@ def nearby():
     return jsonify(out)
 
 
+def area_viewbox(area):
+    """Search box (lng1, lat1, lng2, lat2) around one configured area, or around all of them."""
+    pts = [a for a in AREAS if not area or fold(a["name"]) == fold(area)] or AREAS
+    if not pts:
+        return None
+    pad_lat, pad_lng = 0.12, 0.15  # roughly 13 km around each area's centre
+    return (min(a["lng"] for a in pts) - pad_lng, max(a["lat"] for a in pts) + pad_lat,
+            max(a["lng"] for a in pts) + pad_lng, min(a["lat"] for a in pts) - pad_lat)
+
+
+def nominatim_place(d):
+    a, t = d.get("address") or {}, d.get("extratags") or {}
+    street = " ".join(x for x in (a.get("house_number"), a.get("road")) if x)
+    city = a.get("city") or a.get("town") or a.get("village")
+    lat, lng = float(d["lat"]), float(d["lon"])
+    cuisine = (t.get("cuisine") or "").split(";")[0].replace("_", " ").strip().title() or None
+    return {"name": d.get("name") or (d.get("display_name") or "").split(",")[0], "address": ", ".join(x for x in (street, city) if x) or None,
+            "neighborhood": a.get("neighbourhood") or a.get("suburb") or a.get("quarter"), "cuisine": cuisine,
+            "phone": t.get("phone") or t.get("contact:phone"), "hours": t.get("opening_hours"),
+            "website": t.get("website") or t.get("contact:website"), "lat": lat, "lng": lng, "area": nearest_area(lat, lng) or city}
+
+
+@app.get("/admin/api/osm/search")
+@editor_required
+def osm_search():
+    """Restaurant name -> matching food places on OpenStreetMap in the chosen area, with whatever address,
+    phone, hours and website OpenStreetMap has, to pre-fill the place form from home."""
+    q = clean(request.args.get("q"))
+    if not q:
+        return make_err(400, "Type a name to search for")
+    params = {"q": q, "format": "jsonv2", "limit": 15, "addressdetails": 1, "extratags": 1, "countrycodes": "us"}
+    box = area_viewbox(clean(request.args.get("area")))
+    if box:
+        params.update(viewbox=",".join(f"{x:.4f}" for x in box), bounded=1)
+    try:
+        res = http_json("https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(params), timeout=10)
+    except Exception as e:  # noqa: BLE001
+        app.logger.info("Nominatim search failed for %s: %s", q, e)
+        return make_err(502, "OpenStreetMap didn't answer. Try again in a moment, or type the details in.")
+    food = set(FOOD.split("|"))
+    results = [nominatim_place(d) for d in res
+               if (d.get("category") or d.get("class")) == "amenity" and d.get("type") in food][:10]
+    known = [dict(r) for r in db().execute("SELECT id, name, lat, lng FROM places WHERE lat IS NOT NULL")]
+    for r in results:
+        r["known"] = next((k["id"] for k in known if km_between(r["lat"], r["lng"], k["lat"], k["lng"]) < 0.1), None)
+    return jsonify(results=results)
+
+
 @app.get("/admin/api/geocode")
 @editor_required
 def geocode_route():

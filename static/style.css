@@ -1,5 +1,6 @@
 /* Where to Eat — styled with Nick's Graphite Red design system: monochrome, square corners, regular-weight
-   Archivo, thin line icons, and Progressive Red as the one accent (the live "you are here" dot, and errors).
+   Archivo and thin line icons, warmed up with Progressive Red for active states and deals, British racing green as
+   Nick's own "go-to" marker, and photos doing the emotional work.
    Token names below match the system's tokens.json; the app-role variables after them map those tokens to UI jobs. */
 @font-face { font-family: "Archivo"; font-style: normal; font-weight: 100 900; font-display: swap;
   src: url("fonts/archivo-vietnamese-wght-normal.woff2") format("woff2-variations");
@@ -18,6 +19,7 @@
   --border: #e5e5e5; --border-strong: #000000;
   --action: #000000; --on-action: #ffffff;
   --red-progressive: #f50537; --danger: var(--red-progressive); --focus-ring: #000000;
+  --green-british-racing: #004225;
   --sans: "Archivo", Verdana, sans-serif;
   --space-xxs: 4px; --space-xs: 8px; --space-s: 16px; --space-m: 24px; --space-l: 40px; --space-xl: 64px; --space-page: 96px;
   --radius-none: 0; --radius-pill: 9999px;
@@ -25,7 +27,10 @@
   /* app roles */
   --page: var(--surface); --card: var(--surface); --well: var(--surface-subtle); --field: var(--surface);
   --text-2: var(--ink-soft);          /* secondary text at body sizes */
-  --price-over: var(--ink-soft);      /* map fill for places whose cheapest dish is over the cap */
+  --deal: var(--red-progressive);     /* prices under the cap, active states, section rules */
+  --on-deal: #000000;                 /* small text on red: 5.0:1 (white is only 4.2:1, so white is for 19px+ bold) */
+  --on-deal-lg: #ffffff;
+  --mine: var(--green-british-racing); /* go-to dishes: Nick's signature colour, light grounds only */
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -37,6 +42,7 @@
     --card: var(--surface); --well: var(--surface-subtle); --field: var(--surface);
     /* dark ink-soft is 3.4:1 on surface: too low for body copy, so secondary text stays in ink (size carries it) */
     --text-2: var(--ink);
+    --mine: var(--ink);               /* racing green vanishes on the dark canvas (1.5:1) */
     color-scheme: dark;
   }
 }
@@ -61,18 +67,20 @@ h3 { font-size: 16px; line-height: 24px; font-weight: 700; }
 .spread { display: flex; justify-content: space-between; align-items: center; gap: var(--space-s); flex-wrap: wrap; }
 .ico { width: 24px; height: 24px; flex: 0 0 auto; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: square; stroke-linejoin: miter; vertical-align: -6px; }
 .ico.lg { width: 40px; height: 40px; stroke-width: 1.25; }
-.ico.fav { fill: currentColor; }
+.ico.fav { fill: currentColor; color: var(--mine); }
 :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 /* header: a full-bleed surface-deep band */
 .top { position: sticky; top: 0; z-index: 1000; background: var(--surface-deep); color: var(--on-deep); padding-top: env(safe-area-inset-top); }
 .top-row { display: flex; align-items: stretch; justify-content: space-between; gap: var(--space-s); min-height: 64px; flex-wrap: wrap; }
-.brand { font-size: 24px; line-height: 30px; font-weight: 400; text-decoration: none; color: var(--on-deep); align-self: center; }
+.brand { font-size: 24px; line-height: 30px; font-weight: 400; text-decoration: none; color: var(--on-deep); align-self: center;
+  display: inline-flex; align-items: center; gap: 10px; }
+.brand::before { content: ""; width: 12px; height: 24px; background: var(--red-progressive); }
 #nav { display: flex; gap: var(--space-m); align-items: stretch; }
 #nav a { text-decoration: none; font-size: 14px; line-height: 20px; color: var(--on-deep); opacity: .72; display: flex; align-items: center;
   border-bottom: 2px solid transparent; border-top: 2px solid transparent; }
 #nav a:hover { opacity: 1; }
-#nav a.on { opacity: 1; border-bottom-color: var(--on-deep); }
+#nav a.on { opacity: 1; border-bottom-color: var(--red-progressive); }
 .top :focus-visible { outline-color: var(--on-deep); }
 @media (max-width: 640px) {
   .top-row { min-height: 0; padding-top: var(--space-xs); }
@@ -124,10 +132,23 @@ label.check { display: inline-flex; flex-direction: row; align-items: center; ga
 /* cards: square, hairline-bordered, no shadows */
 .list { display: grid; gap: var(--space-s); grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-none); overflow: hidden; }
-a.place { display: grid; grid-template-columns: 104px 1fr; text-decoration: none; min-height: 128px; }
+a.place { display: grid; grid-template-rows: auto 1fr; text-decoration: none; }
 a.place:hover { border-color: var(--border-strong); }
-.thumb { width: 100%; height: 100%; object-fit: cover; background: var(--well); display: grid; place-items: center; color: var(--ink); min-height: 128px; }
-.place .b { padding: var(--space-s); display: grid; gap: var(--space-xxs); align-content: start; min-width: 0; }
+a.place:hover .t { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+.thumb { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: var(--well); display: grid; place-items: center; color: var(--ink); }
+/* no photo yet: the cover's graphic language: a black slab, ground-coloured speed rules, one red block */
+.ph-art { background:
+    linear-gradient(var(--red-progressive), var(--red-progressive)) 16px 100% / 30% 34% no-repeat,
+    repeating-linear-gradient(to bottom, transparent 0 22px, rgba(255, 255, 255, .85) 22px 24px) 100% 0 / 48% 100% no-repeat,
+    #000000;
+  color: #ffffff; display: grid; place-items: start; padding: var(--space-s); }
+a.deal-row .ph.ph-art { padding: var(--space-xs); background:
+    linear-gradient(var(--red-progressive), var(--red-progressive)) 8px 100% / 34% 30% no-repeat,
+    repeating-linear-gradient(to bottom, transparent 0 10px, rgba(255, 255, 255, .85) 10px 11px) 100% 0 / 46% 100% no-repeat,
+    #000000; }
+a.deal-row .ph.ph-art .ico { width: 20px; height: 20px; }
+.place .b { padding: var(--space-s); display: grid; gap: var(--space-xxs); align-content: start; min-width: 0; border-top: 4px solid transparent; }
+.place.has-deal .b { border-top-color: var(--deal); }
 .place .t { font-size: 20px; line-height: 26px; }
 .place .m { font-size: 14px; line-height: 20px; color: var(--text-2); }
 .place .items { font-size: 14px; line-height: 20px; margin-top: var(--space-xxs); display: grid; gap: var(--space-xxs); }
@@ -136,11 +157,13 @@ a.place:hover { border-color: var(--border-strong); }
 .place .items .ico { width: 16px; height: 16px; vertical-align: -3px; }
 /* prices: data values in copy-1-bold; a dish under the cap is set in an inverted pill */
 .price { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
-.price.deal { background: var(--action); color: var(--on-action); border-radius: var(--radius-pill); padding: 0 var(--space-xs); }
+.price.deal { background: var(--deal); color: var(--on-deal); border-radius: var(--radius-pill); padding: 0 var(--space-xs); }
 .badge { display: inline-flex; align-items: center; gap: var(--space-xxs); font-size: 12px; line-height: 20px; padding: 0 var(--space-xs);
   border-radius: var(--radius-pill); border: 1px solid var(--border-strong); color: var(--ink); white-space: nowrap; vertical-align: 1px; }
-.badge.deal { background: var(--action); border-color: var(--action); color: var(--on-action); }
-.badge.special { background: var(--well); border-color: var(--well); }
+.badge.deal { background: var(--deal); border-color: var(--deal); color: var(--on-deal); }
+.badge.meal { background: var(--action); border-color: var(--action); color: var(--on-action); }
+.badge.special { border-color: var(--red-progressive); }
+.badge.special::before { content: ""; width: 6px; height: 6px; background: var(--red-progressive); }
 .badge.closed { border-color: var(--danger); }
 .badge.closed::before { content: ""; width: 8px; height: 8px; background: var(--danger); border-radius: 50%; }
 .stars { letter-spacing: 1px; color: var(--ink); }
@@ -150,14 +173,14 @@ a.place:hover { border-color: var(--border-strong); }
 /* deals list */
 .deals { display: grid; gap: 0; border-top: 1px solid var(--border); }
 .deals .card { border-width: 0 0 1px; }
-a.deal-row { display: grid; grid-template-columns: 72px 1fr auto; gap: var(--space-s); align-items: center; padding: var(--space-s) 0; text-decoration: none; }
+a.deal-row { display: grid; grid-template-columns: 88px 1fr auto; gap: var(--space-s); align-items: center; padding: var(--space-s) 0; text-decoration: none; }
 a.deal-row:hover .t { text-decoration: underline; text-underline-offset: 3px; }
-a.deal-row img, a.deal-row .ph { width: 72px; height: 72px; object-fit: cover; background: var(--well); display: grid; place-items: center; color: var(--ink); }
+a.deal-row img, a.deal-row .ph { width: 88px; height: 88px; object-fit: cover; background: var(--well); display: grid; place-items: center; color: var(--ink); }
 .deal-row .t { font-size: 16px; line-height: 24px; }
 .deal-row .t .ico { width: 18px; height: 18px; vertical-align: -3px; }
 .deal-row .m { font-size: 14px; line-height: 20px; color: var(--text-2); }
 .deal-row .price { font-size: 20px; line-height: 30px; }
-.deal-row .price.deal { padding: 0 12px; }
+.deal-row .price.deal, .items-table .price.deal { padding: 0 12px; color: var(--on-deal-lg); }  /* 20px bold: white on red is fine */
 /* an old price: a clock and words, never a colour alone */
 .stale { color: var(--ink); }
 .stale::before { content: ""; display: inline-block; width: 12px; height: 12px; margin-right: var(--space-xxs); vertical-align: -1px;
@@ -165,18 +188,23 @@ a.deal-row img, a.deal-row .ph { width: 72px; height: 72px; object-fit: cover; b
 
 /* place page */
 .hero { display: grid; gap: var(--space-m); margin: var(--space-m) 0; }
+.banner { display: block; margin: 0 calc(-1 * var(--space-s)); max-height: 420px; overflow: hidden; background: #000; }
+.banner img { width: 100%; max-height: 420px; object-fit: cover; display: block; }
+@media (min-width: 720px) { .banner { margin: var(--space-m) 0 0; } }
 @media (min-width: 820px) { .hero { grid-template-columns: 1.3fr 1fr; align-items: start; } }
 .facts { display: grid; gap: var(--space-xs); font-size: 16px; }
 .facts .row { gap: var(--space-xs); align-items: flex-start; flex-wrap: nowrap; }
 .mini-map { height: 240px; border: 1px solid var(--border); z-index: 0; }
 .section-h { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-s); margin: var(--space-xl) 0 var(--space-s); flex-wrap: wrap;
-  border-top: 1px solid var(--border); padding-top: var(--space-m); }
+  border-top: 1px solid var(--border); padding-top: var(--space-m); position: relative; }
+.section-h::before { content: ""; position: absolute; top: -1px; left: 0; width: 48px; height: 4px; background: var(--red-progressive); }
 .items-table { width: 100%; border-collapse: collapse; }
 .items-table td { padding: var(--space-s) var(--space-xs); border-bottom: 1px solid var(--border); vertical-align: top; }
 .items-table tr:first-child td { border-top: 1px solid var(--border); }
 .items-table td.p { text-align: right; width: 1%; }
 .items-table td.s { width: 1%; padding-left: 0; padding-right: 0; }
 .items-table .n { font-size: 16px; line-height: 24px; }
+.items-table .price { font-size: 20px; line-height: 30px; }
 .items-table .d { font-size: 14px; line-height: 20px; color: var(--text-2); }
 .items-table .acts { white-space: nowrap; width: 1%; padding-right: 0; }
 .items-table td.s .ico.fav { margin: 8px; }
@@ -212,16 +240,13 @@ a.deal-row img, a.deal-row .ph { width: 72px; height: 72px; object-fit: cover; b
 /* map */
 #map { height: calc(100vh - 260px); min-height: 400px; border: 1px solid var(--border); z-index: 0; }
 .legend { display: flex; gap: var(--space-m); flex-wrap: wrap; font-size: 14px; line-height: 20px; color: var(--text-2); margin: var(--space-s) 0; }
-.dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: -2px; margin-right: var(--space-xs); border: 2px solid var(--surface);
-  box-shadow: 0 0 0 1px var(--border-strong); }
-.dot.deal { background: var(--action); }
-.dot.over { background: var(--price-over); }
-.dot.none { background: var(--surface); border: 2px solid var(--border-strong); box-shadow: none; }
-.dot.live { background: var(--red-progressive); }
+/* legend dots match the map markers, which use fixed colours: the street map is light in both themes */
+.dot { display: inline-block; width: 16px; height: 16px; border-radius: 50%; vertical-align: -3px; margin-right: var(--space-xs); border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px #000000; }
+.dot.deal { background: #f50537; }
+.dot.over { background: #000000; }
+.dot.none { background: #ffffff; border: 3px solid #000000; box-shadow: none; }
 .leaflet-container { font-family: var(--sans); background: var(--well); }
-/* monochrome first: the street map is greyscale (inverted in dark) so only the markers carry weight */
-.leaflet-tile-pane { filter: grayscale(1) contrast(.9) brightness(1.05); }
-@media (prefers-color-scheme: dark) { .leaflet-tile-pane { filter: grayscale(1) invert(1) brightness(.8) contrast(.9); } }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { border-radius: var(--radius-none); box-shadow: none; border: 1px solid var(--border-strong); }
 .leaflet-popup-content { font: 14px/20px var(--sans); margin: 12px var(--space-s); }
 .leaflet-popup-content img { width: 100%; max-height: 120px; object-fit: cover; margin-bottom: var(--space-xs); display: block; }
