@@ -272,3 +272,37 @@ def test_exports_and_health(c):
     assert {"places", "items", "photos"} <= set(data)
     f = c.get("/api/facets").get_json()
     assert [a["name"] for a in f["areas"]][:2] == ["Concord", "San Francisco"]
+
+
+def test_osm_search_filters_food_and_bounds_to_area(c, monkeypatch):
+    add_place(c, name="Known Pho", address=None, lat=37.9701, lng=-122.0402, items=[])
+    seen = {}
+
+    def fake(url, timeout=8, data=None):
+        seen["url"] = url
+        return [
+            {"category": "amenity", "type": "restaurant", "name": "Pho Concord", "lat": "37.97012", "lon": "-122.04018",
+             "address": {"house_number": "1800", "road": "Willow Pass Road", "city": "Concord", "suburb": "Downtown"},
+             "extratags": {"cuisine": "vietnamese;noodle", "phone": "+1 925-555-0100", "opening_hours": "Mo-Sa 10:00-21:00",
+                           "website": "https://pho.example.com"}},
+            {"category": "highway", "type": "bus_stop", "name": "Pho Stop", "lat": "37.97", "lon": "-122.04"},
+            {"category": "amenity", "type": "fast_food", "name": "Taco Truck", "lat": "37.98", "lon": "-122.03"}]
+    monkeypatch.setattr(A, "http_json", fake)
+    d = c.get("/admin/api/osm/search?q=pho&area=Concord").get_json()
+    assert "bounded=1" in seen["url"] and "extratags=1" in seen["url"] and "viewbox=-122.1811" in seen["url"]
+    assert [r["name"] for r in d["results"]] == ["Pho Concord", "Taco Truck"]
+    pho = d["results"][0]
+    assert pho["address"] == "1800 Willow Pass Road, Concord" and pho["cuisine"] == "Vietnamese"
+    assert pho["phone"] == "+1 925-555-0100" and pho["hours"] == "Mo-Sa 10:00-21:00" and pho["area"] == "Concord"
+    assert pho["known"] is not None and d["results"][1]["known"] is None
+    assert c.get("/admin/api/osm/search?q=").status_code == 400
+    assert c.get("/api/osm/search?q=pho").status_code == 404  # editors only
+    monkeypatch.setattr(A, "http_json", lambda *a, **k: (_ for _ in ()).throw(OSError("down")))
+    assert c.get("/admin/api/osm/search?q=pho").status_code == 502
+
+
+def test_area_viewbox():
+    lng1, lat1, lng2, lat2 = A.area_viewbox("San Francisco")
+    assert lng1 < -122.4194 < lng2 and lat2 < 37.7749 < lat1
+    everywhere = A.area_viewbox("")
+    assert everywhere[0] < -122.4194 and everywhere[2] > -122.0311  # spans Concord and SF

@@ -166,12 +166,12 @@ function locateMe(done) {
 function placeCard(p) {
   const meta = [p.cuisine, p.neighborhood || p.area, dollars(p.price_level)].filter(Boolean).map(esc).join(" · ");
   const items = (p.top_items || []).map((i) => `<div><span>${i.favorite ? icon("star", "fav") + " " : ""}${esc(i.name)}</span>${priceHTML(i.price)}</div>`).join("");
-  return `<a class="card place" href="#/place/${p.id}">
-    ${p.photo ? `<img class="thumb" loading="lazy" src="/photos/t-${esc(p.photo)}" alt="">` : `<span class="thumb">${icon("bowl", "lg")}</span>`}
+  return `<a class="card place ${p.deals ? "has-deal" : ""}" href="#/place/${p.id}">
+    ${p.photo ? `<img class="thumb" loading="lazy" src="/photos/t-${esc(p.photo)}" alt="">` : `<span class="thumb ph-art">${icon("bowl", "lg")}</span>`}
     <div class="b">
       <div class="t">${esc(p.name)} ${p.closed ? `<span class="badge closed">Closed</span>` : ""}</div>
       <div class="m">${meta}${p.km != null ? ` · ${km(p.km)}` : ""} ${stars(p.rating)}</div>
-      <div class="row" style="margin-top:2px">${p.cheapest != null ? `<span class="badge ${isDeal(p.cheapest) ? "deal" : ""}">from ${money(p.cheapest)}</span>` : `<span class="badge">no prices yet</span>`}
+      <div class="row" style="margin-top:2px">${p.cheapest != null ? `<span class="badge">from ${money(p.cheapest)}</span>` : `<span class="badge">no prices yet</span>`}
         ${p.deals ? `<span class="badge deal">${p.deals} under ${money(S.max ? +S.max : cap())}</span>` : ""}</div>
       ${items ? `<div class="items">${items}</div>` : ""}
     </div></a>`;
@@ -203,7 +203,7 @@ async function dealsView() {
     }
     $("#count").textContent = `${items.length} dish${items.length === 1 ? "" : "es"}${S.max ? ` under $${S.max}` : ""}, cheapest first${S.near ? " · within 5 km" : ""}`;
     $("#results").innerHTML = items.map((i) => `<a class="card deal-row" href="#/place/${i.place_id}">
-        ${i.photo ? img(i.photo) : `<span class="ph">${icon("bowl")}</span>`}
+        ${i.photo ? img(i.photo) : `<span class="ph ph-art">${icon("bowl")}</span>`}
         <div><div class="t">${i.favorite ? icon("star", "fav") + " " : ""}${esc(i.name)} ${kindBadge(i.kind)}</div>
           <div class="m">${esc(i.place_name)}${i.neighborhood || i.area ? " · " + esc(i.neighborhood || i.area) : ""}${i.km != null ? " · " + km(i.km) : ""}</div>
           ${i.description || i.available ? `<div class="m">${[i.description, i.available].filter(Boolean).map(esc).join(" · ")}</div>` : ""}
@@ -229,13 +229,12 @@ function loadLeaflet() {
   });
 }
 const tiles = (map) => L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap contributors" }).addTo(map);
-// Graphite Red: markers differ in lightness, not hue. Filled action colour = something under the cap,
-// filled graphite = the cheapest dish costs more, hollow = no prices yet.
+// The street map is light in both themes, so markers use fixed colours: red = something under the cap,
+// black = the cheapest dish costs more, hollow = no prices yet. Red also differs from black in lightness.
 const tok = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 function markerStyle(p) {
-  const ground = tok("--surface"), edge = tok("--border-strong");
-  if (p.cheapest == null) return { radius: 8, color: edge, weight: 3, fillColor: ground, fillOpacity: 1 };
-  return { radius: 9, color: ground, weight: 2, fillColor: isDeal(p.cheapest) ? tok("--action") : tok("--price-over"), fillOpacity: 1 };
+  if (p.cheapest == null) return { radius: 8, color: "#000000", weight: 3, fillColor: "#ffffff", fillOpacity: 1 };
+  return { radius: 9, color: "#ffffff", weight: 2, fillColor: isDeal(p.cheapest) ? "#f50537" : "#000000", fillOpacity: 1 };
 }
 async function mapView() {
   const f = await facets();
@@ -276,7 +275,8 @@ async function mapView() {
   $("#m-near").onclick = () => locateMe((pos) => {
     S.near = pos;
     if (me) me.remove();
-    me = L.circleMarker([pos.lat, pos.lng], { radius: 7, color: tok("--surface"), weight: 3, fillColor: tok("--red-progressive"), fillOpacity: 1 }).addTo(map).bindPopup("You are here");
+    me = L.layerGroup([L.circleMarker([pos.lat, pos.lng], { radius: 15, color: "#000000", weight: 2, fill: false }),
+      L.circleMarker([pos.lat, pos.lng], { radius: 6, color: "#ffffff", weight: 3, fillColor: "#000000", fillOpacity: 1 })]).addTo(map).bindPopup("You are here");
     map.setView([pos.lat, pos.lng], 16);
   });
   $$("#m-max [data-v]").forEach((b) => b.onclick = () => {
@@ -335,6 +335,7 @@ async function placeView(id) {
     ADMIN && p.private_notes ? `<div class="row">${icon("lock")}<span>${esc(p.private_notes)} <span class="hint">(editors only)</span></span></div>` : "",
   ].join("");
   view.innerHTML = `
+    ${p.photos.length ? `<a class="banner" href="/photos/${esc(p.photos[0].file)}" target="_blank" rel="noopener">${img(p.photos[0].file, false)}</a>` : ""}
     <div class="hero">
       <div>
         <h1>${esc(p.name)} ${p.closed ? `<span class="badge closed">Closed</span>` : ""}</h1>
@@ -495,6 +496,10 @@ async function editView(id) {
     <form class="form" id="pf">
       ${id ? "" : `<div class="panel"><div class="spread"><div><strong>At the restaurant?</strong><div class="hint">Fill this in from where you're standing.</div></div>
         <button type="button" id="here" class="primary">${icon("locate")} I'm here</button></div><div id="here-out"></div></div>`}
+      <div class="panel"><strong>${id ? "Fill in from OpenStreetMap" : "Or look it up on OpenStreetMap"}</strong>
+        <div class="hint">Search by name; picking a match fills in ${id ? "only the fields that are empty" : "the address, phone, hours and website it has"}.</div>
+        <div class="row" style="flex-wrap:nowrap;margin-top:8px"><input id="osm-q" type="search" placeholder="Restaurant name, e.g. Los Gallos" value="${esc(p.name)}" aria-label="Restaurant name">
+          <button type="button" id="osm-go">Search</button></div><div id="osm-out"></div></div>
       <label class="f">Name<input name="name" required value="${esc(p.name)}" maxlength="100" autocomplete="off"></label>
       <div class="grid2">
         <label class="f">Area<select name="area"><option value="">Pick from the map point</option>${areas.map((a) => `<option ${a === p.area ? "selected" : ""}>${esc(a)}</option>`).join("")}</select></label>
@@ -554,11 +559,35 @@ async function editView(id) {
     } catch (e) { toast(e.message); }
   };
 
+  // fill only empty fields, so nothing typed (or saved) is overwritten
+  const fill = (o) => {
+    for (const k of ["name", "address", "cuisine", "website", "phone", "hours", "neighborhood"]) if (o[k] && !F(k).value) F(k).value = o[k];
+    if (o.area) { if (![...F("area").options].some((x) => x.value === o.area)) F("area").add(new Option(o.area, o.area)); if (!F("area").value) F("area").value = o.area; }
+  };
+  const osmSearch = async () => {
+    const q = $("#osm-q").value.trim(), out = $("#osm-out");
+    if (!q) return toast("Type a name first");
+    out.innerHTML = `<p class="muted small">Searching OpenStreetMap…</p>`;
+    let d;
+    try { d = await api("osm/search?" + new URLSearchParams({ q, area: F("area").value })); } catch (e) { out.innerHTML = `<p class="note">${esc(e.message)}</p>`; return; }
+    out.innerHTML = d.results.length ? `<div class="pick-list" style="margin-top:8px">${d.results.map((o, n) => `<button type="button" data-r="${n}">
+        <span><strong>${esc(o.name)}</strong><br><span class="hint">${[o.cuisine, o.address].filter(Boolean).map(esc).join(" · ")}</span>
+          <br><span class="hint">${["phone", "hours", "website"].filter((k) => o[k]).join(", ") || "no phone, hours or website listed"}</span></span>
+        ${o.known ? `<span class="hint">already in the list</span>` : ""}</button>`).join("")}</div>
+        <p class="hint">Data © OpenStreetMap contributors. Missing something? Type it in.</p>`
+      : `<p class="note" style="margin-top:8px">No match on OpenStreetMap${F("area").value ? ` in ${esc(F("area").value)}` : ""}. Type the details in.</p>`;
+    $$("[data-r]", out).forEach((b) => b.onclick = () => {
+      const o = d.results[+b.dataset.r];
+      fill(o);
+      if (o.lat != null && !F("lat").value) setPin(o.lat, o.lng);
+      $$("[data-r]", out).forEach((x) => x.classList.toggle("primary", x === b));
+      toast(`Filled from ${o.name}`);
+    });
+  };
+  $("#osm-go").onclick = osmSearch;
+  $("#osm-q").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); osmSearch(); } };
+
   if (!id) {
-    const fill = (o) => {
-      for (const k of ["name", "address", "cuisine", "website", "phone", "hours", "neighborhood"]) if (o[k] && !F(k).value) F(k).value = o[k];
-      if (o.area) { if (![...F("area").options].some((x) => x.value === o.area)) F("area").add(new Option(o.area, o.area)); if (!F("area").value) F("area").value = o.area; }
-    };
     $("#here").onclick = () => locateMe(async (pos) => {
       const out = $("#here-out");
       out.innerHTML = `<p class="muted small">Looking around…</p>`;
