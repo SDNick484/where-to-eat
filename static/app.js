@@ -350,6 +350,7 @@ async function placeView(id) {
       ${p.lat != null ? `<div id="mini" class="mini-map"></div>` : ADMIN && p.address ? `<div class="note">Couldn't find this address on the map. Check it in <a href="#/place/${p.id}/edit">Edit place</a>, or set the pin there.</div>` : ""}
     </div>
 
+    ${ADMIN ? visitsHTML(p) : ""}
     <div class="section-h"><h2>What to get</h2><span class="muted small">cheapest first · <span class="price deal">$</span> = under $${cap()}</span></div>
     ${p.items.length ? `<table class="items-table"><tbody>${p.items.map((i) => itemRow(i, p)).join("")}</tbody></table>` : `<div class="empty" style="padding:16px">No dishes yet.</div>`}
     ${ADMIN ? `<div style="margin-top:12px" id="add-item">${itemFormHTML()}</div>
@@ -370,8 +371,34 @@ async function placeView(id) {
     }).catch(() => {});
   }
   if (!ADMIN) return;
+  wireVisits(p);
   wireItems(p);
   wirePhotos(p, cfg);
+}
+
+// "We went": editors only. Visits are never in the public API, so nothing here renders for visitors.
+function visitsHTML(p) {
+  const vs = p.visits || [];
+  return `<div class="panel" id="visits" style="margin-top:16px"><div class="spread"><div><strong>${icon("check")} We went</strong>
+      <div class="hint">Private. Hometown Table uses this to remember where you've been.</div></div>
+      <button type="button" class="btn primary" data-went>We went today</button></div>
+    <div class="row" style="margin-top:8px"><label class="f" style="margin:0">We went on…<input type="date" data-went-day max="${esc(new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10))}"></label>
+      <button type="button" class="btn" data-went-on>Add that day</button></div>
+    ${vs.length ? `<div style="margin-top:8px">${vs.map((v) => `<div class="spread small"><span>${esc(v.day)}</span>
+      <button type="button" class="icon-btn" data-unwent="${v.id}" aria-label="Remove the visit on ${esc(v.day)}">${icon("x")}</button></div>`).join("")}</div>`
+      : `<div class="hint" style="margin-top:8px">No visits recorded yet.</div>`}</div>`;
+}
+
+function wireVisits(p) {
+  const reload = () => placeView(p.id);
+  const add = async (day) => {
+    try { await api(`places/${p.id}/visits`, { method: "POST", body: day ? { day } : {} }); toast("Recorded"); reload(); } catch (err) { toast(err.message); }
+  };
+  $("[data-went]").onclick = () => add();
+  $("[data-went-on]").onclick = () => { const d = $("[data-went-day]").value; if (!d) { toast("Pick a day first"); return; } add(d); };
+  $$("[data-unwent]").forEach((b) => b.onclick = async () => {
+    try { await api("visits/" + b.dataset.unwent, { method: "DELETE" }); toast("Removed"); reload(); } catch (err) { toast(err.message); }
+  });
 }
 
 function wireItems(p) {

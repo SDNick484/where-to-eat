@@ -7,15 +7,16 @@ Model:  place (a restaurant: where it is, cuisine, $-$$$)
 
 Public:  /            browse places, deals and the map (no private notes or who added what)
          /api/...     public JSON
+Feed:    /feed/visits private JSON of "We went" visits for Hometown Table; bearer token only (HOMETOWN_FEED_TOKEN)
 Editors: /admin       same UI with editing; put this path behind Cloudflare Access
          /admin/api/  full JSON + writes; requires a verified Access JWT
                       (or a direct LAN request when LAN_EDIT=1)
 
 Environment (see /etc/conf.d/lunch):
   DATA_DIR, CF_TEAM_DOMAIN, CF_AUD, ADMIN_EMAILS, LAN_EDIT, PUBLIC_VIEW, AREAS, CHEAP_UNDER,
-  ANTHROPIC_API_KEY, ANTHROPIC_MODEL
+  ANTHROPIC_API_KEY, ANTHROPIC_MODEL, HOMETOWN_FEED_TOKEN
 """
-import base64, csv, datetime as dt, io, json, math, os, re, sqlite3, time, unicodedata
+import base64, csv, datetime as dt, hmac, io, json, math, os, re, sqlite3, time, unicodedata
 import urllib.error, urllib.parse, urllib.request, uuid
 from functools import wraps
 from pathlib import Path
@@ -33,6 +34,7 @@ LAN_EDIT = os.environ.get("LAN_EDIT", "1") == "1"
 PUBLIC_VIEW = os.environ.get("PUBLIC_VIEW", "1") == "1"
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5-5").strip()
+HOMETOWN_FEED_TOKEN = os.environ.get("HOMETOWN_FEED_TOKEN", "").strip().strip("'\"")
 UA = "where-to-eat/1.0 (personal lunch list; https://lunch.nickandrade.com)"
 
 
@@ -84,6 +86,12 @@ CREATE TABLE IF NOT EXISTS photos (
   added_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS photos_place ON photos(place_id, pos);
+CREATE TABLE IF NOT EXISTS visits (
+  id INTEGER PRIMARY KEY,
+  place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+  day TEXT NOT NULL, added_by TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS visits_place_day ON visits(place_id, day);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
 ITEM_KINDS = ("item", "meal", "special")
@@ -451,6 +459,9 @@ def get_place(place_id, private):
     for it in items:
         it["photos"] = [p for p in photos if p["item_id"] == it["id"]]
     place.update(items=items, photos=photos)
+    if private:  # "We went" visits are editor-only: never added to the public shape
+        place["visits"] = [dict(v) for v in con.execute(
+            "SELECT id, day, added_by FROM visits WHERE place_id=? ORDER BY day DESC, id DESC LIMIT 8", (place_id,))]
     return jsonify(place)
 
 
@@ -1055,6 +1066,78 @@ def read_menu():
     return jsonify(out)
 
 
+# ========================================================================== visits ("We went")
+def visit_day(v):
+    """A YYYY-MM-DD day, default today (app time zone); not in the future."""
+    if v in (None, ""):
+        return today()
+    if not isinstance(v, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+        abort(make_err(400, "day must look like 2026-11-14"))
+    try:
+        d = dt.date.fromisoformat(v)
+    except ValueError:
+        abort(make_err(400, "day isn't a real date"))
+    if d.isoformat() > today():
+        abort(make_err(400, "day can't be in the future"))
+    return d.isoformat()
+
+
+@app.post("/admin/api/places/<int:place_id>/visits")
+@editor_required
+def add_visit(place_id):
+    day = visit_day((request.get_json(silent=True) or {}).get("day"))
+    con = db()
+    if not con.execute("SELECT 1 FROM places WHERE id=?", (place_id,)).fetchone():
+        abort(404)
+    cur = con.execute("INSERT OR IGNORE INTO visits (place_id, day, added_by) VALUES (?,?,?)", (place_id, day, who()))
+    con.commit()
+    row = con.execute("SELECT id, place_id, day FROM visits WHERE place_id=? AND day=?", (place_id, day)).fetchone()
+    return jsonify(dict(row)), (201 if cur.rowcount else 200)  # a second tap the same day returns the existing visit
+
+
+@app.delete("/admin/api/visits/<int:visit_id>")
+@editor_required
+def delete_visit(visit_id):
+    con = db()
+    if not con.execute("DELETE FROM visits WHERE id=?", (visit_id,)).rowcount:
+        abort(404)
+    con.commit()
+    return jsonify(ok=True)
+
+
+def feed_int(name, default, lo, hi):
+    raw = request.args.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        n = int(raw)
+    except ValueError:
+        abort(make_err(400, f"{name} must be a whole number"))
+    if n < lo or n > hi:
+        abort(make_err(400, f"{name} must be between {lo} and {hi}"))
+    return n
+
+
+@app.get("/feed/visits")
+def feed_visits():
+    """Private feed for Hometown Table. Deliberately NOT behind viewer_required/editor_required: this route is
+    authenticated only by the HOMETOWN_FEED_TOKEN bearer token, and that token opens nothing but this route."""
+    if not HOMETOWN_FEED_TOKEN:
+        abort(404)
+    scheme, _, given = request.headers.get("Authorization", "").partition(" ")
+    if scheme.lower() != "bearer" or not hmac.compare_digest(given.strip().encode(), HOMETOWN_FEED_TOKEN.encode()):
+        return make_err(401, "A valid bearer token is required")
+    after = feed_int("after", 0, 0, 2**62)
+    limit = feed_int("limit", 200, 1, 500)
+    rows = db().execute("""SELECT v.id, v.day, v.place_id, p.name, p.area, p.address, p.lat, p.lng
+        FROM visits v JOIN places p ON p.id=v.place_id WHERE v.id>? ORDER BY v.id LIMIT ?""", (after, limit)).fetchall()
+    visits = [{"ref": str(r["id"]), "day": r["day"], "name": r["name"], "location": r["area"],
+               "place_id": r["place_id"], "address": r["address"], "lat": r["lat"], "lng": r["lng"]} for r in rows]
+    resp = jsonify(version=1, visits=visits, next=rows[-1]["id"] if rows else after)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 # ========================================================================== export
 @app.get("/admin/api/export.json")
 @editor_required
@@ -1063,7 +1146,8 @@ def export_json():
     data = {"exported": dt.datetime.now().isoformat(timespec="seconds"),
             "places": [dict(r) for r in con.execute("SELECT * FROM places ORDER BY id")],
             "items": [dict(r) for r in con.execute("SELECT * FROM items ORDER BY id")],
-            "photos": [dict(r) for r in con.execute("SELECT * FROM photos ORDER BY id")]}
+            "photos": [dict(r) for r in con.execute("SELECT * FROM photos ORDER BY id")],
+            "visits": [dict(r) for r in con.execute("SELECT * FROM visits ORDER BY id")]}  # private export only
     return Response(json.dumps(data, indent=1, ensure_ascii=False), mimetype="application/json",
                     headers={"Content-Disposition": f"attachment; filename=lunch-{today()}.json"})
 

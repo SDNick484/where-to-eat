@@ -86,6 +86,7 @@ add_setting "$CONF" PUBLIC_VIEW 1 "1 = anyone can browse places, deals and the m
 add_setting "$CONF" AREAS '"Concord|37.9780|-122.0311;San Francisco|37.7749|-122.4194"' \
   "Areas for the filter chips and map buttons: name|lat|lng separated by ;"
 add_setting "$CONF" CHEAP_UNDER 15 "Dishes at or under this many dollars are highlighted as cheap"
+add_setting "$CONF" HOMETOWN_FEED_TOKEN "" "Bearer token for GET /feed/visits (Hometown Table's WTE_TOKEN); empty = the feed is off. Generate: openssl rand -hex 32"
 add_setting "$CONF" ANTHROPIC_API_KEY "$(from_siblings ANTHROPIC_API_KEY)" "Claude API key for reading menu photos (console.anthropic.com)"
 add_setting "$CONF" ANTHROPIC_MODEL claude-sonnet-5-5 "Model used for menu reading"
 chmod 640 "$CONF"; chown root:"$SVC_USER" "$CONF"
@@ -123,7 +124,7 @@ description="Where to Eat (lunch list)"
 : ${PORT:=8769}
 : ${DATA_DIR:=/var/lib/lunch}
 export HOME=/var/lib/lunch  # newer gunicorn keeps a small control socket under $HOME
-export PORT DATA_DIR CF_TEAM_DOMAIN CF_AUD ADMIN_EMAILS LAN_EDIT PUBLIC_VIEW AREAS CHEAP_UNDER ANTHROPIC_API_KEY ANTHROPIC_MODEL
+export PORT DATA_DIR CF_TEAM_DOMAIN CF_AUD ADMIN_EMAILS LAN_EDIT PUBLIC_VIEW AREAS CHEAP_UNDER ANTHROPIC_API_KEY ANTHROPIC_MODEL HOMETOWN_FEED_TOKEN
 supervisor="supervise-daemon"
 respawn_delay=5
 respawn_max=10
@@ -161,6 +162,7 @@ echo "Where to Eat is running:  http://$IP:$PORT/        (editing on the LAN: ht
 echo "Health: $(wget -qO- http://127.0.0.1:$PORT/healthz | tr -d '\n ')"
 [ -n "${ADDED:-}" ] && echo "New settings added:${ADDED}"
 grep -q '^ANTHROPIC_API_KEY=$' "$CONF" && echo "  - Menu reading is off until you set ANTHROPIC_API_KEY in $CONF"
+grep -q '^HOMETOWN_FEED_TOKEN=$' "$CONF" && echo "  - The visits feed is off until you set HOMETOWN_FEED_TOKEN in $CONF (same value as Hometown Table's WTE_TOKEN)"
 grep -q '^CF_AUD=$' "$CONF" && echo "  - Set CF_AUD in $CONF after creating the Access app for $HOST/admin"
 grep -q '^ADMIN_EMAILS=$' "$CONF" && echo "  - ADMIN_EMAILS is empty: anyone your Access policy lets in can edit"
 [ "${HC:-}" = added ] && echo "  - Added Lunch to HEALTH_CHECKS in $OPS_CONF"
