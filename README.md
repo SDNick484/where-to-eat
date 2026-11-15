@@ -101,7 +101,19 @@ To keep the whole thing private, set `PUBLIC_VIEW=0`. `/` then redirects to `/ad
 | `PUBLIC_VIEW` | `1` | `0` puts everything behind `/admin` |
 | `LAN_EDIT` | `1` | Direct LAN requests may edit |
 | `ADMIN_EMAILS` | | Who may edit; empty = anyone the Access policy lets in |
+| `HOMETOWN_FEED_TOKEN` | | Bearer token for the private visits feed; the feed is off (404) while empty |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | `claude-sonnet-5-5` | Menu reading |
+
+## We went, and the visits feed
+On a place's page in `/admin`, **We went today** records a visit; **We went on…** takes an earlier date (never a future one). One visit per place per day, so a second tap the same day changes nothing. The last few visits are listed with a remove button. Visits are private: they never appear in the public pages or `/api/...`, only in the editors' JSON export.
+
+[Hometown Table](https://github.com/SDNick484/hometown-table) pulls them once a day from `GET /feed/visits?after=<id>&limit=<1..500>` with `Authorization: Bearer <HOMETOWN_FEED_TOKEN>`. Generate the token on the host (for example `openssl rand -hex 32`), put it in `/etc/conf.d/lunch`, run `rc-service lunch restart`, and give the same value to Hometown Table as `WTE_TOKEN`. The route answers 404 while the token is unset and 401 for a missing or wrong one. The token opens only this route; it is checked instead of, not on top of, the viewer and editor checks, and Cloudflare Access doesn't cover `/feed`.
+
+```json
+{"version": 1, "visits": [{"ref": "45", "day": "2026-11-14", "name": "Casa Ejemplo", "location": "Concord",
+  "place_id": 12, "address": "100 Main St, Concord, CA", "lat": 37.97, "lng": -122.03}], "next": 45}
+```
+Visits come in id order (`id > after`); `next` is the last id returned, or `after` when there is nothing new. `location` is the place's area; `address`, `lat` and `lng` may be `null`. Removing a visit later isn't propagated to Hometown Table.
 
 ## On the phone
 Open `https://lunch.nickandrade.com/admin` in Chrome and choose **Install app**. Like Dinner Log, it has a small service worker so Android offers the install. The manifest is requested with credentials, so installing works behind Access. It always loads fresh data and shows the last copy when you're offline.

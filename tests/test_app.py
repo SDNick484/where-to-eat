@@ -1,5 +1,5 @@
 """Run: python3 -m pytest -q tests   (DATA_DIR is a temp folder; no network)"""
-import io, os, sys, tempfile, time
+import io, json, os, sys, tempfile, time
 from pathlib import Path
 
 import pytest
@@ -306,3 +306,116 @@ def test_area_viewbox():
     assert lng1 < -122.4194 < lng2 and lat2 < 37.7749 < lat1
     everywhere = A.area_viewbox("")
     assert everywhere[0] < -122.4194 and everywhere[2] > -122.0311  # spans Concord and SF
+
+
+# ------------------------------------------------------------------ "We went" visits and the feed
+def visit(c, pid, **body):
+    return c.post(f"/admin/api/places/{pid}/visits", json=body)
+
+
+def test_visit_defaults_to_today_and_repeat_is_a_noop(c):
+    p = add_place(c, name="Casa Ejemplo")
+    r = visit(c, p["id"])
+    assert r.status_code == 201
+    v = r.get_json()
+    assert v["day"] == A.today() and v["place_id"] == p["id"]
+    again = visit(c, p["id"])
+    assert again.status_code == 200 and again.get_json()["id"] == v["id"]
+    assert len(c.get(f"/admin/api/places/{p['id']}").get_json()["visits"]) == 1
+
+
+def test_visit_explicit_day_future_refused_and_bad_input(c):
+    p = add_place(c, name="Casa Ejemplo")
+    r = visit(c, p["id"], day="2026-01-05")
+    assert r.status_code == 201 and r.get_json()["day"] == "2026-01-05"
+    tomorrow = (A.dt.date.today() + A.dt.timedelta(days=1)).isoformat()
+    assert visit(c, p["id"], day=tomorrow).status_code == 400
+    assert visit(c, p["id"], day="yesterday").status_code == 400
+    assert visit(c, p["id"], day="2026-1-5").status_code == 400
+    assert visit(c, 999999).status_code == 404
+    days = [x["day"] for x in c.get(f"/admin/api/places/{p['id']}").get_json()["visits"]]
+    assert days == ["2026-01-05"]
+
+
+def test_visit_delete_and_cascade(c):
+    p = add_place(c, name="Casa Ejemplo")
+    v = visit(c, p["id"], day="2026-02-01").get_json()
+    assert c.delete(f"/admin/api/visits/{v['id']}").status_code == 200
+    assert c.delete(f"/admin/api/visits/{v['id']}").status_code == 404
+    visit(c, p["id"], day="2026-02-02")
+    c.delete(f"/admin/api/places/{p['id']}")
+    assert A.connect().execute("SELECT count(*) FROM visits WHERE place_id=?", (p["id"],)).fetchone()[0] == 0
+
+
+def test_visit_writes_need_an_editor(c):
+    p = add_place(c, name="Casa Ejemplo")
+    assert c.post(f"/admin/api/places/{p['id']}/visits", json={}, headers=CF).status_code == 401
+    v = visit(c, p["id"], day="2026-03-01").get_json()
+    assert c.delete(f"/admin/api/visits/{v['id']}", headers=CF).status_code == 401
+
+
+def test_visits_never_public(c):
+    p = add_place(c, name="Casa Ejemplo")
+    visit(c, p["id"], day="2026-04-01")
+    for url in ("/api/places", f"/api/places/{p['id']}", "/api/deals", "/api/map", "/api/facets", "/"):
+        body = c.get(url).get_data(as_text=True)
+        assert "2026-04-01" not in body and "visits" not in body, url
+    assert "visits" not in c.get(f"/api/places/{p['id']}").get_json()
+    # the private export may carry them
+    assert "2026-04-01" in c.get("/admin/api/export.json").get_data(as_text=True)
+
+
+def feed(c, token="s3cret", **qs):
+    h = {"Authorization": f"Bearer {token}"} if token is not None else {}
+    return c.get("/feed/visits", query_string=qs, headers=h)
+
+
+def test_feed_404_unset_401_wrong_and_bypasses_viewer_checks(c, monkeypatch):
+    monkeypatch.setattr(A, "HOMETOWN_FEED_TOKEN", "")
+    assert feed(c).status_code == 404
+    monkeypatch.setattr(A, "HOMETOWN_FEED_TOKEN", "s3cret")
+    assert feed(c, token=None).status_code == 401
+    assert feed(c, token="nope").status_code == 401
+    assert c.get("/feed/visits", headers={"Authorization": "Basic s3cret"}).status_code == 401
+    assert feed(c).status_code == 200
+    # token only: no editor/viewer identity is consulted, even in private mode through Cloudflare
+    monkeypatch.setattr(A, "PUBLIC_VIEW", False)
+    r = c.get("/feed/visits", headers={**CF, "Authorization": "Bearer s3cret"})
+    assert r.status_code == 200
+    # and the token does not unlock anything else
+    assert c.post("/admin/api/places", json={"name": "X"}, headers={**CF, "Authorization": "Bearer s3cret"}).status_code == 401
+
+
+def test_feed_contract_paging_and_fields(c, monkeypatch):
+    monkeypatch.setattr(A, "HOMETOWN_FEED_TOKEN", "s3cret")
+    con = A.connect()
+    con.execute("DELETE FROM visits")
+    con.commit()
+    con.close()
+    a = add_place(c, name="Casa Ejemplo", area="Concord", private_notes="secret")
+    b = add_place(c, name="Noodle Example", address=None, area="San Francisco")
+    ids = [visit(c, a["id"], day="2026-05-01").get_json()["id"],
+           visit(c, b["id"], day="2026-05-02").get_json()["id"],
+           visit(c, a["id"], day="2026-05-03").get_json()["id"]]
+    d = feed(c).get_json()
+    assert set(d) == {"version", "visits", "next"} and d["version"] == 1
+    assert [v["ref"] for v in d["visits"]] == [str(i) for i in ids] and d["next"] == ids[-1]
+    first = d["visits"][0]
+    assert set(first) == {"ref", "day", "name", "location", "place_id", "address", "lat", "lng"}
+    assert first["name"] == "Casa Ejemplo" and first["location"] == "Concord" and first["day"] == "2026-05-01"
+    assert first["place_id"] == a["id"] and isinstance(first["ref"], str)
+    assert first["address"] == "1950 Grant St, Concord" and first["lat"] is not None
+    nul = d["visits"][1]
+    assert nul["address"] is None and nul["lat"] is None and nul["lng"] is None
+    assert "secret" not in json.dumps(d)
+    p1 = feed(c, limit=2).get_json()
+    assert [v["ref"] for v in p1["visits"]] == [str(ids[0]), str(ids[1])] and p1["next"] == ids[1]
+    p2 = feed(c, after=p1["next"], limit=2).get_json()
+    assert [v["ref"] for v in p2["visits"]] == [str(ids[2])] and p2["next"] == ids[2]
+    empty = feed(c, after=ids[2]).get_json()
+    assert empty == {"version": 1, "visits": [], "next": ids[2]}
+    assert feed(c, after=10**6).get_json()["next"] == 10**6
+    assert feed(c, limit=0).status_code == 400 and feed(c, limit=501).status_code == 400
+    assert feed(c, limit="x").status_code == 400 and feed(c, after=-1).status_code == 400
+    assert feed(c, after="x").status_code == 400
+    assert len(feed(c, limit=500).get_json()["visits"]) == 3
